@@ -1,0 +1,25 @@
+Register,Description,Scale,Unit,Notes,Category
+80,AC Input Voltage,÷10,V,,AC Input
+82,AC Input Frequency,÷100,Hz,,AC Input
+88,AC Output Voltage,÷10,V,,AC Output
+90,AC Output Frequency,÷100,Hz,,AC Output
+91,Output Apparent Power,1,VA,,AC Output
+92,Output Active Power,1,W,,AC Output
+93,Output Load,÷10,%,,AC Output
+94,Inverter Output Power,1,W,,AC Output
+128,Battery Voltage,÷10,V,,Battery
+129,Battery Current (signed),÷10,A,"Negative=Charging, Positive=Discharging",Battery
+149,Grid Power Consumption,1,W,,Grid
+375,Battery Constant Charge Voltage,÷10,V,,Charging
+376,Battery Float Charge Voltage,÷10,V,,Charging
+377,Solar Charge Current Limit,÷10,A,,Charging
+378,Solar Charge Current Limit (copy),÷10,A,Duplicate mirror,Charging
+624,PV Voltage,÷10,V,,PV
+625,PV Current,÷100,A,,PV
+626,PV Power,1,W,,PV
+630,Today's PV Generation,÷100,kWh,,PV
+618-619,PV Energy Counter,÷100,kWh,Likely lifetime counter,Energy
+620-621,PV Energy Counter,÷100,kWh,,Energy
+622-623,PV Energy Counter,÷100,kWh,,Energy
+540,Active Power,1,W,,Output Power
+541,Apparent Power,1,VA,,Output Power
