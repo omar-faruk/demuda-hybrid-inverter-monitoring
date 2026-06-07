@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inverter Energy Matrix</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Inter:wght@300;400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d0d0d;
+        }
+        .power-font {
+            font-family: 'Comfortaa', sans-serif;
+        }
+        /* Glowing rings matching power's layout architecture */
+        .ring-solar { box-shadow: 0 0 20px rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.4); }
+        .ring-grid { box-shadow: 0 0 20px rgba(239, 68, 68, 0.25); border-color: rgba(239, 68, 68, 0.4); }
+        .ring-battery { box-shadow: 0 0 20px rgba(16, 185, 129, 0.25); border-color: rgba(16, 185, 129, 0.4); }
+        .ring-inverter { box-shadow: 0 0 25px rgba(168, 85, 247, 0.35); border-color: rgba(168, 85, 247, 0.6); }
+        .ring-home { box-shadow: 0 0 25px rgba(59, 130, 246, 0.3); border-color: rgba(59, 130, 246, 0.5); }
+    </style>
+</head>
+<body class="text-neutral-200 min-h-screen p-4 md:p-8 selection:bg-neutral-800">
+
+    <div class="max-w-7xl mx-auto space-y-8">
+        
+        <header class="flex justify-between items-center border-b border-neutral-900 pb-4">
+            <div class="flex items-center gap-4">
+                <span class="power-font text-xl font-bold tracking-widest text-neutral-100">Inverter <span class="text-xs tracking-normal font-sans font-light text-neutral-500 uppercase ml-1">Power Monitoring</span></span>
+            </div>
+            <div id="status-badge" class="px-3 py-1 rounded-full text-2xs font-semibold uppercase tracking-wider bg-neutral-900 text-neutral-400 border border-neutral-800 flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span> Offline
+            </div>
+        </header>
+
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-8 bg-[#141414] border border-neutral-900 rounded-3xl p-6 lg:p-8 shadow-2xl relative overflow-hidden">
+            
+            <div class="flex flex-col justify-between space-y-6 order-2 lg:order-1">
+                <div>
+                    <h2 class="text-neutral-400 text-xs font-semibold uppercase tracking-widest mb-4">Power Information</h2>
+                    <div class="space-y-4">
+                        <div onclick="toggleDataset(0)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
+                            <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Solar Production</span>
+                            <span id="pv_w_lbl" class="font-semibold text-neutral-100">0 W</span>
+                        </div>
+                        <div onclick="toggleDataset(1)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
+                            <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-500"></span> Grid Draw</span>
+                            <span id="grid_w_lbl" class="font-semibold text-neutral-100">0 W</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900">
+                            <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Inverter Output</span>
+                            <span id="inv_out_w_lbl" class="font-semibold text-neutral-100">0 W</span>
+                        </div>
+                        <div onclick="toggleDataset(2)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
+                            <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Home Draw (Active Power)</span>
+                            <span id="ac_out_w_lbl" class="font-semibold text-neutral-100">0 W</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-neutral-900 pt-4 grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                        <span class="text-neutral-500 block mb-0.5">Solar Today</span>
+                        <span id="pv_today_kwh" class="text-base font-medium text-neutral-200">0.00 kWh</span>
+                    </div>
+                    <div>
+                        <span class="text-neutral-500 block mb-0.5">Lifetime Yield</span>
+                        <span id="pv_lifetime_kwh" class="text-base font-medium text-neutral-200">0 kWh</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 relative h-[440px] flex items-center justify-center order-1 lg:order-2">
+                <canvas id="powerFlowCanvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+
+                <div class="absolute top-4 left-6 md:left-12 flex flex-col items-center">
+                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center text-amber-500 ring-solar transition-transform duration-300 hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z"/></svg>
+                    </div>
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mt-1">Solar</span>
+                </div>
+
+                <div class="absolute top-4 flex flex-col items-center">
+                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center text-red-500 ring-grid transition-transform duration-300 hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    </div>
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mt-1">Grid</span>
+                </div>
+
+                <div class="absolute top-4 right-6 md:right-12 flex flex-col items-center">
+                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center text-emerald-500 ring-battery transition-transform duration-300 hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 10.5h.75c.414 0 .75.336.75.75v1.5c0 .414-.336.75-.75.75H21M3 8.25h15c.414 0 .75.336.75.75v6c0 .414-.336.75-.75.75H3a.75.75 0 01-.75-.75V9c0-.414.336-.75.75-.75z"/></svg>
+                    </div>
+                    <span id="bat_v_badge" class="text-[11px] font-semibold text-neutral-300 mt-1">0V</span>
+                </div>
+
+                <div class="absolute top-[180px] flex flex-col items-center">
+                    <div class="w-20 h-20 rounded-full bg-neutral-950 border-2 flex items-center justify-center text-purple-400 ring-inverter transition-transform duration-300 hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>
+                    </div>
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-400 mt-1">Central Inverter</span>
+                </div>
+
+                <div class="absolute bottom-4 flex flex-col items-center z-10">
+                    <div class="w-18 h-18 rounded-full bg-neutral-950 border-2 flex flex-col items-center justify-center text-blue-400 ring-home transition-transform duration-300 hover:scale-105">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                        <span id="load_pct_badge" class="text-[11px] font-semibold text-neutral-200">0%</span>
+                    </div>
+                    <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mt-1">Home Load</span>
+                </div>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2 bg-[#141414] border border-neutral-900 rounded-3xl p-5 shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-widest text-neutral-400">Power History (30p)</h3>
+                    <button onclick="clearHistory()" class="text-3xs font-semibold uppercase tracking-wider text-neutral-500 hover:text-red-400 transition cursor-pointer">Purge History</button>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="historyChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-[#141414] border border-neutral-900 rounded-3xl p-5 shadow-xl flex flex-col justify-between">
+                <h3 class="text-xs font-semibold uppercase tracking-widest text-neutral-400 mb-4">System Parameters</h3>
+                <div class="divide-y divide-neutral-900 text-sm flex-1 flex flex-col justify-center">
+                    <div class="py-2.5 flex justify-between">
+                        <span class="text-neutral-500">AC Input Line</span>
+                        <span id="ac_in" class="font-mono text-neutral-300">0V @ 0Hz</span>
+                    </div>
+                    <div class="py-2.5 flex justify-between">
+                        <span class="text-neutral-500">Inverter Activity</span>
+                        <span id="inv_out_w" class="font-mono text-neutral-300">0 W</span>
+                    </div>
+                    <div class="py-2.5 flex justify-between">
+                        <span class="text-neutral-500">Battery Draw Amps</span>
+                        <span id="bat_a" class="font-mono text-neutral-300">0 A</span>
+                    </div>
+                    <div class="py-2.5 flex justify-between">
+                        <span class="text-neutral-500">Bulk / Float Config</span>
+                        <span id="charge_limits" class="font-mono text-neutral-300">0V / 0V</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- SYSTEM ENGINE CONFIGS ---
+        const MQTT_BROKER = "ws://localhost:9001"; 
+        const MQTT_TOPIC = "solar/data";
+
+        let liveValues = { solar: 0, battery_w: 0, inverter: 0, grid: 0, ac_out_va:0  };
+        let flowSpeeds = { solar: 0, battery: 0, inverter: 0, grid: 0, ac_out_va:0 };
+
+        // --- RETRIEVAL HISTORY STORES ---
+        const MAX_HISTORY_POINTS = 30;
+        let historicalData;
+        try {
+            historicalData = JSON.parse(localStorage.getItem('solar_history'));
+            if (!historicalData || !historicalData.labels || !historicalData.pv || !historicalData.load || !historicalData.grid) throw new Error();
+        } catch(e) {
+            historicalData = { labels: [], pv: [], load: [], grid: [] };
+        }
+
+        // --- TIMELINE CHART CONFIG ---
+        const ctx = document.getElementById('historyChart').getContext('2d');
+        const historyChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: historicalData.labels,
+                datasets: [
+                    { label: 'Solar', data: historicalData.pv, borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 0 },
+                    { label: 'Grid', data: historicalData.grid, borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 0 },
+                    { label: 'Home Load', data: historicalData.load, borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 0 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#404040', font: { size: 10 } } },
+                    y: { grid: { color: '#171717' }, ticks: { color: '#404040', font: { size: 10 } } }
+                }
+            }
+        });
+
+        function toggleDataset(index) {
+            historyChart.setDatasetVisibility(index, !historyChart.isDatasetVisible(index));
+            historyChart.update();
+        }
+
+        // --- CONCENTRIC 3-TO-1 INVERTER VECTOR CANVAS ---
+        const canvas = document.getElementById('powerFlowCanvas');
+        const fctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // High frequency particle production clock loop
+        setInterval(() => {
+            if (flowSpeeds.solar > 0.05) particles.push({ path: 'solar_to_inv', progress: 0 });
+            if (flowSpeeds.grid > 0.05) particles.push({ path: 'grid_to_inv', progress: 0 });
+            if (flowSpeeds.battery > 0.05) particles.push({ path: 'bat_to_inv', progress: 0 });
+            if (flowSpeeds.inverter > 0.05) particles.push({ path: 'inv_to_home', progress: 0 });
+        }, 140);
+
+        function renderpowerMatrix() {
+            fctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            const centerX = w * 0.5;
+
+            // Strict structural nodes layout matrix matching your command configuration
+            const nodes = {
+                solar: { x: w * (w < 768 ? 0.15 : 0.22), y: 44 },
+                grid: { x: centerX, y: 44 },
+                battery: { x: w * (w < 768 ? 0.85 : 0.78), y: 44 },
+                inverter: { x: centerX, y: 220 },
+                home: { x: centerX, y: h - 44 }
+            };
+
+            // Setup underlying trace paths (All feed to inverter first -> inverter feeds home)
+            const structuralLines = [
+                { from: nodes.solar, to: nodes.inverter },
+                { from: nodes.grid, to: nodes.inverter },
+                { from: nodes.battery, to: nodes.inverter },
+                { from: nodes.inverter, to: nodes.home }
+            ];
+
+            // Render deep static pipelines background layers
+            fctx.lineWidth = 1.5;
+            fctx.strokeStyle = '#222222';
+            structuralLines.forEach(l => {
+                fctx.beginPath(); fctx.moveTo(l.from.x, l.from.y); fctx.lineTo(l.to.x, l.to.y); fctx.stroke();
+            });
+
+            // Iterate and step vector flow particles forward
+            particles.forEach((p, index) => {
+                let speed = 0.007;
+                let color = '#d4d4d4';
+                let start, end;
+
+                if (p.path === 'solar_to_inv') { start = nodes.solar; end = nodes.inverter; speed += flowSpeeds.solar * 0.012; color = '#f59e0b'; }
+                if (p.path === 'grid_to_inv') { start = nodes.grid; end = nodes.inverter; speed += flowSpeeds.grid * 0.012; color = '#ef4444'; }
+                if (p.path === 'bat_to_inv') { start = nodes.battery; end = nodes.inverter; speed += flowSpeeds.battery * 0.012; color = '#10b981'; }
+                if (p.path === 'inv_to_home') { start = nodes.inverter; end = nodes.home; speed += flowSpeeds.inverter * 0.009; color = '#a855f7'; }
+
+                p.progress += speed;
+                if (p.progress >= 1) { particles.splice(index, 1); return; }
+
+                let currentX = start.x + (end.x - start.x) * p.progress;
+                let currentY = start.y + (end.y - start.y) * p.progress;
+
+                fctx.beginPath(); fctx.arc(currentX, currentY, 3, 0, Math.PI * 2);
+                fctx.fillStyle = color;
+                fctx.shadowBlur = 8; fctx.shadowColor = color;
+                fctx.fill(); fctx.shadowBlur = 0;
+            });
+
+            // RENDER CONVERGED LIVE TEXT WATTAGE LABELS DIRECTLY ON CHANNELS
+            fctx.font = '10px monospace';
+            fctx.textAlign = 'center';
+            fctx.textBaseline = 'middle';
+
+            const lineLabels = [
+                { start: nodes.solar, end: nodes.inverter, value: liveValues.solar + 'W', color: '#f59e0b', offX: -18, offY: -12 },
+                { start: nodes.grid, end: nodes.inverter, value: liveValues.grid + 'W', color: '#ef4444', offX: 24, offY: 0 },
+                { start: nodes.battery, end: nodes.inverter, value: liveValues.battery_w + 'W', color: '#10b981', offX: 18, offY: -12 },
+                // The single central main throughput channel label (Inverter output -> Home load)
+                { start: nodes.inverter, end: nodes.home, value: liveValues.inverter + 'VA (' + liveValues.ac_out_va + 'W)' , color: '#a855f7', offX: 26, offY: 0 }
+            ];
+
+            lineLabels.forEach(l => {
+                const midX = l.start.x + (l.end.x - l.start.x) * 0.5;
+                const midY = l.start.y + (l.end.y - l.start.y) * 0.5;
+
+                // Render micro background pill box behind font strings to obscure trailing particles
+                fctx.fillStyle = 'rgba(13, 13, 13, 0.85)';
+                const widthMetrics = fctx.measureText(l.value).width;
+                fctx.fillRect(midX + l.offX - (widthMetrics / 2) - 4, midY + l.offY - 7, widthMetrics + 8, 14);
+
+                fctx.fillStyle = l.color;
+                fctx.fillText(l.value, midX + l.offX, midY + l.offY);
+            });
+
+            requestAnimationFrame(renderpowerMatrix);
+        }
+        requestAnimationFrame(renderpowerMatrix);
+
+        // --- TELEMETRY MAPPER ---
+        function updateUI(data) {
+            // Commit raw numeric updates to global structures
+            liveValues.solar = Math.round(data.pv_w);
+            liveValues.grid = Math.round(data.grid_w);
+            liveValues.inverter = Math.round(data.inv_out_w);
+            liveValues.battery_w = Math.round(data.bat_v * data.bat_a);
+            liveValues.ac_out_va = Math.round(data.ac_out_va);
+
+            // Compute relative speed velocities
+            flowSpeeds.solar = Math.min(data.pv_w / 200, 4);
+            flowSpeeds.grid = Math.min(data.grid_w / 200, 4);
+            flowSpeeds.inverter = Math.min(data.inv_out_w / 200, 4);
+            flowSpeeds.battery = Math.min(liveValues.battery_w / 200, 4);
+
+            // Text configuration changes
+            document.getElementById('pv_w_lbl').innerText = `${liveValues.solar} W`;
+            document.getElementById('grid_w_lbl').innerText = `${liveValues.grid} W`;
+            document.getElementById('inv_out_w_lbl').innerText = `${liveValues.inverter} W`;
+            document.getElementById('ac_out_w_lbl').innerText = `${Math.round(data.ac_out_w)} W`;
+            
+            document.getElementById('load_pct_badge').innerText = `${Number(data.load_pct).toFixed(1)}%`;
+            document.getElementById('bat_v_badge').innerText = `${Number(data.bat_v).toFixed(1)} V`;
+
+            document.getElementById('pv_today_kwh').innerText = `${Number(data.pv_today_kwh).toFixed(2)} kWh`;
+            document.getElementById('pv_lifetime_kwh').innerText = `${data.pv_lifetime_kwh/100} kWh`;
+
+            document.getElementById('ac_in').innerText = `${Number(data.ac_in_v).toFixed(1)}V @ ${Number(data.ac_in_hz).toFixed(1)}Hz`;
+            document.getElementById('inv_out_w').innerText = `${Number(data.inv_out_w).toFixed(0)} W`;
+            document.getElementById('bat_a').innerText = `${Number(data.bat_a).toFixed(1)} A`;
+            document.getElementById('charge_limits').innerText = `${Number(data.charge_v_const).toFixed(1)}V / ${Number(data.charge_v_float).toFixed(1)}V`;
+
+            // Push chronologies to chart stack
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            historicalData.labels.push(timestamp);
+            historicalData.pv.push(data.pv_w);
+            historicalData.load.push(data.ac_out_w);
+            historicalData.grid.push(data.grid_w);
+
+            if (historicalData.labels.length > MAX_HISTORY_POINTS) {
+                historicalData.labels.shift();
+                historicalData.pv.shift();
+                historicalData.load.shift();
+                historicalData.grid.shift();
+            }
+
+            localStorage.setItem('solar_history', JSON.stringify(historicalData));
+            historyChart.update();
+        }
+
+        // --- MQTT CONNECTION FACTORIES ---
+        const client = mqtt.connect(MQTT_BROKER);
+        const statusBadge = document.getElementById('status-badge');
+
+        client.on('connect', () => {
+            statusBadge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span> Network Live`;
+            statusBadge.className = "px-3 py-1 rounded-full text-2xs font-semibold uppercase tracking-wider bg-emerald-950/30 text-emerald-400 border border-emerald-900/40 flex items-center gap-2";
+            client.subscribe(MQTT_TOPIC);
+        });
+
+        client.on('close', () => {
+            statusBadge.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-red-500"></span> Offline`;
+            statusBadge.className = "px-3 py-1 rounded-full text-2xs font-semibold uppercase tracking-wider bg-neutral-900 text-neutral-400 border border-neutral-800 flex items-center gap-2";
+        });
+
+        client.on('message', (topic, message) => {
+            try {
+                updateUI(JSON.parse(message.toString()));
+            } catch (err) {
+                console.error("Payload breakdown runtime handling.", err);
+            }
+        });
+
+        function clearHistory() {
+            historicalData = { labels: [], pv: [], load: [], grid: [] };
+            localStorage.removeItem('solar_history');
+            historyChart.data.labels = historicalData.labels;
+            historyChart.data.datasets[0].data = historicalData.pv;
+            historyChart.data.datasets[1].data = historicalData.grid;
+            historyChart.data.datasets[2].data = historicalData.load;
+            historyChart.update();
+        }
+
+        const mockPayload = { "ac_in_v": 229.6, "ac_in_hz": 50.04, "ac_out_v": 229.6, "ac_out_hz": 50.04, "ac_out_va": 277, "ac_out_w": 277, "load_pct": 13.8, "inv_out_w": 177, "bat_v": 13.2, "bat_a": 0, "grid_w": 177, "charge_v_const": 14.4, "charge_v_float": 14.2, "pv_charge_limit_a": 50, "pv_v": 84.4, "pv_a": 1.71, "pv_w": 133, "pv_today_kwh": 2.62, "pv_lifetime_kwh": 3059 };
+        updateUI(mockPayload);
+    </script>
+</body>
+</html>
