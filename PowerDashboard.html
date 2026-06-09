@@ -343,7 +343,7 @@
             // Velocity logic weights
             flowSpeeds.solar = Math.min(data.pv_w / 200, 4);
             flowSpeeds.grid = Math.min(data.grid_w / 200, 4);
-            flowSpeeds.inverter = Math.min(data.inv_out_w / 200, 4);
+            flowSpeeds.inverter = Math.min(data.ac_out_va / 200, 4);
             flowSpeeds.battery = Math.min(Math.abs(liveValues.battery_w) / 200, 4);
 
             document.getElementById('pv_w_lbl').innerText = `${liveValues.solar} W`;
@@ -370,7 +370,7 @@
             document.getElementById('bat_v_badge').innerText = `${Number(data.bat_v).toFixed(1)} V`;
 
             document.getElementById('pv_today_kwh').innerText = `${Number(data.pv_today_kwh).toFixed(2)} kWh`;
-            document.getElementById('pv_lifetime_kwh').innerText = `${data.pv_lifetime_kwh} kWh`;
+            document.getElementById('pv_lifetime_kwh').innerText = `${data.pv_lifetime_kwh/100} kWh`;
 
             document.getElementById('ac_in').innerText = `${Number(data.ac_in_v).toFixed(1)}V @ ${Number(data.ac_in_hz).toFixed(1)}Hz`;
             document.getElementById('inv_out_w').innerText = `${Number(data.inv_out_w).toFixed(0)} W`;
