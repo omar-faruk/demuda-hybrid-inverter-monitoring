@@ -43,7 +43,7 @@
             <div class="flex flex-col justify-between space-y-6 order-2 lg:order-1">
                 <div>
                     <h2 class="text-neutral-400 text-xs font-semibold uppercase tracking-widest mb-4">Power Information</h2>
-                    <div class="space-y-4">
+                    <div class="space-y-3">
                         <div onclick="toggleDataset(0)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
                             <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Solar Production</span>
                             <span id="pv_w_lbl" class="font-semibold text-neutral-100">0 W</span>
@@ -53,8 +53,8 @@
                             <span id="grid_w_lbl" class="font-semibold text-neutral-100">0 W</span>
                         </div>
                         <div class="flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900">
-                            <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Inverter Output</span>
-                            <span id="inv_out_w_lbl" class="font-semibold text-neutral-100">0 W</span>
+                            <span class="text-sm text-neutral-400 flex items-center gap-2"><span id="bat_dot" class="w-2 h-2 rounded-full bg-neutral-500"></span> Battery Power</span>
+                            <span id="bat_w_lbl" class="font-semibold text-neutral-100">0 W</span>
                         </div>
                         <div onclick="toggleDataset(2)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
                             <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Home Draw (Active Power)</span>
@@ -79,22 +79,22 @@
                 <canvas id="powerFlowCanvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
 
                 <div class="absolute top-4 left-6 md:left-12 flex flex-col items-center">
-                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center text-amber-500 ring-solar transition-transform duration-300 hover:scale-105">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-11.314l.707.707m11.314 11.314l.707-.707M12 7a5 5 0 100 10 5 5 0 000-10z"/></svg>
+                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center ring-solar transition-transform duration-300 hover:scale-105 overflow-hidden p-2">
+                        <img src="https://freesvg.org/img/SimplePVPanel.png" alt="Solar" class="w-full h-full object-contain" />
                     </div>
                     <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mt-1">Solar</span>
                 </div>
 
                 <div class="absolute top-4 flex flex-col items-center">
-                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center text-red-500 ring-grid transition-transform duration-300 hover:scale-105">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    <div class="w-14 h-14 rounded-full bg-slate-100 border-2 flex items-center justify-center ring-grid transition-transform duration-300 hover:scale-105 overflow-hidden p-2">
+                        <img src="transmission_pole.png" alt="Grid" class="w-full h-full object-contain" />
                     </div>
                     <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mt-1">Grid</span>
                 </div>
 
                 <div class="absolute top-4 right-6 md:right-12 flex flex-col items-center">
-                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center text-emerald-500 ring-battery transition-transform duration-300 hover:scale-105">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 10.5h.75c.414 0 .75.336.75.75v1.5c0 .414-.336.75-.75.75H21M3 8.25h15c.414 0 .75.336.75.75v6c0 .414-.336.75-.75.75H3a.75.75 0 01-.75-.75V9c0-.414.336-.75.75-.75z"/></svg>
+                    <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center ring-battery transition-transform duration-300 hover:scale-105 overflow-hidden p-2">
+                        <img src="https://freesvg.org/img/rodentia-icons_battery-medium-charging.png" alt="Battery" class="w-full h-full object-contain" />
                     </div>
                     <span id="bat_v_badge" class="text-[11px] font-semibold text-neutral-300 mt-1">0V</span>
                 </div>
@@ -153,11 +153,11 @@
 
     <script>
         // --- SYSTEM ENGINE CONFIGS ---
-        const MQTT_BROKER = "ws://localhost:9001"; 
+        const MQTT_BROKER = "ws://192.168.1.127:9001"; 
         const MQTT_TOPIC = "solar/data";
 
-        let liveValues = { solar: 0, battery_w: 0, inverter: 0, grid: 0, ac_out_va:0  };
-        let flowSpeeds = { solar: 0, battery: 0, inverter: 0, grid: 0, ac_out_va:0 };
+        let liveValues = { solar: 0, battery_w: 0, inverter: 0, grid: 0, ac_out_va: 0, ac_out_w: 0, bat_a: 0 };
+        let flowSpeeds = { solar: 0, battery: 0, inverter: 0, grid: 0 };
 
         // --- RETRIEVAL HISTORY STORES ---
         const MAX_HISTORY_POINTS = 30;
@@ -209,13 +209,41 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // High frequency particle production clock loop
+        // Particle generator clock loop
         setInterval(() => {
             if (flowSpeeds.solar > 0.05) particles.push({ path: 'solar_to_inv', progress: 0 });
             if (flowSpeeds.grid > 0.05) particles.push({ path: 'grid_to_inv', progress: 0 });
-            if (flowSpeeds.battery > 0.05) particles.push({ path: 'bat_to_inv', progress: 0 });
             if (flowSpeeds.inverter > 0.05) particles.push({ path: 'inv_to_home', progress: 0 });
+            
+            // Dynamic generation rules for battery flow direction states
+            if (flowSpeeds.battery > 0.05) {
+                if (liveValues.bat_a > 0.1) {
+                    // Charging state: Particles run from Inverter up into Battery
+                    particles.push({ path: 'inv_to_bat', progress: 0 });
+                } else if (liveValues.bat_a < -0.1) {
+                    // Discharging state: Particles run from Battery down into Inverter
+                    particles.push({ path: 'bat_to_inv', progress: 0 });
+                }
+            }
         }, 140);
+
+        // Utility helper to render an oriented glow arrow pointing along a specific pathway angle
+        function drawArrowHead(ctx, x, y, angle, color) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.fillStyle = color;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = color;
+            ctx.beginPath();
+            ctx.moveTo(4, 0);
+            ctx.lineTo(-5, -4);
+            ctx.lineTo(-2, 0);
+            ctx.lineTo(-5, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
 
         function renderpowerMatrix() {
             fctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -224,16 +252,15 @@
             const h = canvas.height;
             const centerX = w * 0.5;
 
-            // Strict structural nodes layout matrix matching your command configuration
+            // Structural layout node definitions
             const nodes = {
-                solar: { x: w * (w < 768 ? 0.15 : 0.22), y: 44 },
+                solar: { x: w * (w < 768 ? 0.15 : 0.14), y: 70 },
                 grid: { x: centerX, y: 44 },
-                battery: { x: w * (w < 768 ? 0.85 : 0.78), y: 44 },
+                battery: { x: w * (w < 768 ? 0.85 : 0.85), y: 70 },
                 inverter: { x: centerX, y: 220 },
                 home: { x: centerX, y: h - 44 }
             };
 
-            // Setup underlying trace paths (All feed to inverter first -> inverter feeds home)
             const structuralLines = [
                 { from: nodes.solar, to: nodes.inverter },
                 { from: nodes.grid, to: nodes.inverter },
@@ -241,14 +268,14 @@
                 { from: nodes.inverter, to: nodes.home }
             ];
 
-            // Render deep static pipelines background layers
+            // Render background lines layers
             fctx.lineWidth = 1.5;
             fctx.strokeStyle = '#222222';
             structuralLines.forEach(l => {
                 fctx.beginPath(); fctx.moveTo(l.from.x, l.from.y); fctx.lineTo(l.to.x, l.to.y); fctx.stroke();
             });
 
-            // Iterate and step vector flow particles forward
+            // Advance particle arrows matrix forward across frames
             particles.forEach((p, index) => {
                 let speed = 0.007;
                 let color = '#d4d4d4';
@@ -256,8 +283,13 @@
 
                 if (p.path === 'solar_to_inv') { start = nodes.solar; end = nodes.inverter; speed += flowSpeeds.solar * 0.012; color = '#f59e0b'; }
                 if (p.path === 'grid_to_inv') { start = nodes.grid; end = nodes.inverter; speed += flowSpeeds.grid * 0.012; color = '#ef4444'; }
-                if (p.path === 'bat_to_inv') { start = nodes.battery; end = nodes.inverter; speed += flowSpeeds.battery * 0.012; color = '#10b981'; }
                 if (p.path === 'inv_to_home') { start = nodes.inverter; end = nodes.home; speed += flowSpeeds.inverter * 0.009; color = '#a855f7'; }
+                
+                // Mapped paths evaluating battery condition states
+                if (p.path === 'bat_to_inv') { start = nodes.battery; end = nodes.inverter; speed += flowSpeeds.battery * 0.012; color = '#10b981'; }
+                if (p.path === 'inv_to_bat') { start = nodes.inverter; end = nodes.battery; speed += flowSpeeds.battery * 0.012; color = '#10b981'; }
+
+                if(!start || !end) return;
 
                 p.progress += speed;
                 if (p.progress >= 1) { particles.splice(index, 1); return; }
@@ -265,13 +297,12 @@
                 let currentX = start.x + (end.x - start.x) * p.progress;
                 let currentY = start.y + (end.y - start.y) * p.progress;
 
-                fctx.beginPath(); fctx.arc(currentX, currentY, 3, 0, Math.PI * 2);
-                fctx.fillStyle = color;
-                fctx.shadowBlur = 8; fctx.shadowColor = color;
-                fctx.fill(); fctx.shadowBlur = 0;
+                // Find angle tracking pathway coordinates vector heading
+                let angle = Math.atan2(end.y - start.y, end.x - start.x);
+                drawArrowHead(fctx, currentX, currentY, angle, color);
             });
 
-            // RENDER CONVERGED LIVE TEXT WATTAGE LABELS DIRECTLY ON CHANNELS
+            // RENDER CONVERGED LIVE WATTAGE LABELS DIRECTLY ON CHANNELS
             fctx.font = '10px monospace';
             fctx.textAlign = 'center';
             fctx.textBaseline = 'middle';
@@ -279,16 +310,14 @@
             const lineLabels = [
                 { start: nodes.solar, end: nodes.inverter, value: liveValues.solar + 'W', color: '#f59e0b', offX: -18, offY: -12 },
                 { start: nodes.grid, end: nodes.inverter, value: liveValues.grid + 'W', color: '#ef4444', offX: 24, offY: 0 },
-                { start: nodes.battery, end: nodes.inverter, value: liveValues.battery_w + 'W', color: '#10b981', offX: 18, offY: -12 },
-                // The single central main throughput channel label (Inverter output -> Home load)
-                { start: nodes.inverter, end: nodes.home, value: liveValues.inverter + 'VA (' + liveValues.ac_out_va + 'W)' , color: '#a855f7', offX: 26, offY: 0 }
+                { start: nodes.battery, end: nodes.inverter, value: Math.abs(liveValues.battery_w) + 'W', color: '#10b981', offX: 18, offY: -12 },
+                { start: nodes.inverter, end: nodes.home, value: liveValues.ac_out_va + 'VA (' + liveValues.ac_out_w + 'W)', color: '#a855f7', offX: 44, offY: 0 }
             ];
 
             lineLabels.forEach(l => {
                 const midX = l.start.x + (l.end.x - l.start.x) * 0.5;
                 const midY = l.start.y + (l.end.y - l.start.y) * 0.5;
 
-                // Render micro background pill box behind font strings to obscure trailing particles
                 fctx.fillStyle = 'rgba(13, 13, 13, 0.85)';
                 const widthMetrics = fctx.measureText(l.value).width;
                 fctx.fillRect(midX + l.offX - (widthMetrics / 2) - 4, midY + l.offY - 7, widthMetrics + 8, 14);
@@ -303,37 +332,51 @@
 
         // --- TELEMETRY MAPPER ---
         function updateUI(data) {
-            // Commit raw numeric updates to global structures
-            liveValues.solar = Math.round(data.pv_w);
-            liveValues.grid = Math.round(data.grid_w);
-            liveValues.inverter = Math.round(data.inv_out_w);
-            liveValues.battery_w = Math.round(data.bat_v * data.bat_a);
-            liveValues.ac_out_va = Math.round(data.ac_out_va);
+            liveValues.solar = data.pv_w;
+            liveValues.grid = data.grid_w;
+            liveValues.inverter = data.inv_out_w;
+            liveValues.ac_out_va = data.ac_out_va;
+            liveValues.ac_out_w = data.ac_out_w;
+            liveValues.battery_w = Number(data.bat_v * data.bat_a).toFixed(2);
+            liveValues.bat_a = data.bat_a;
 
-            // Compute relative speed velocities
+            // Velocity logic weights
             flowSpeeds.solar = Math.min(data.pv_w / 200, 4);
             flowSpeeds.grid = Math.min(data.grid_w / 200, 4);
             flowSpeeds.inverter = Math.min(data.inv_out_w / 200, 4);
-            flowSpeeds.battery = Math.min(liveValues.battery_w / 200, 4);
+            flowSpeeds.battery = Math.min(Math.abs(liveValues.battery_w) / 200, 4);
 
-            // Text configuration changes
             document.getElementById('pv_w_lbl').innerText = `${liveValues.solar} W`;
             document.getElementById('grid_w_lbl').innerText = `${liveValues.grid} W`;
-            document.getElementById('inv_out_w_lbl').innerText = `${liveValues.inverter} W`;
-            document.getElementById('ac_out_w_lbl').innerText = `${Math.round(data.ac_out_w)} W`;
+            document.getElementById('ac_out_w_lbl').innerText = `${liveValues.ac_out_w} W`;
             
+            const batPowerLbl = document.getElementById('bat_w_lbl');
+            const batDot = document.getElementById('bat_dot');
+            if (data.bat_a > 0.1) {
+                batPowerLbl.innerText = `+${liveValues.battery_w} W (Charging)`;
+                batPowerLbl.className = "font-semibold text-emerald-400";
+                batDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+            } else if (data.bat_a < -0.1) {
+                batPowerLbl.innerText = `-${Math.abs(liveValues.battery_w)} W (Discharging)`;
+                batPowerLbl.className = "font-semibold text-amber-500";
+                batDot.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+            } else {
+                batPowerLbl.innerText = `0 W (Idle)`;
+                batPowerLbl.className = "font-semibold text-neutral-400";
+                batDot.className = "w-2 h-2 rounded-full bg-neutral-500";
+            }
+
             document.getElementById('load_pct_badge').innerText = `${Number(data.load_pct).toFixed(1)}%`;
             document.getElementById('bat_v_badge').innerText = `${Number(data.bat_v).toFixed(1)} V`;
 
             document.getElementById('pv_today_kwh').innerText = `${Number(data.pv_today_kwh).toFixed(2)} kWh`;
-            document.getElementById('pv_lifetime_kwh').innerText = `${data.pv_lifetime_kwh/100} kWh`;
+            document.getElementById('pv_lifetime_kwh').innerText = `${data.pv_lifetime_kwh} kWh`;
 
             document.getElementById('ac_in').innerText = `${Number(data.ac_in_v).toFixed(1)}V @ ${Number(data.ac_in_hz).toFixed(1)}Hz`;
             document.getElementById('inv_out_w').innerText = `${Number(data.inv_out_w).toFixed(0)} W`;
             document.getElementById('bat_a').innerText = `${Number(data.bat_a).toFixed(1)} A`;
             document.getElementById('charge_limits').innerText = `${Number(data.charge_v_const).toFixed(1)}V / ${Number(data.charge_v_float).toFixed(1)}V`;
 
-            // Push chronologies to chart stack
             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             historicalData.labels.push(timestamp);
             historicalData.pv.push(data.pv_w);
@@ -351,7 +394,7 @@
             historyChart.update();
         }
 
-        // --- MQTT CONNECTION FACTORIES ---
+        // --- MQTT FACTORIES ---
         const client = mqtt.connect(MQTT_BROKER);
         const statusBadge = document.getElementById('status-badge');
 
@@ -370,7 +413,7 @@
             try {
                 updateUI(JSON.parse(message.toString()));
             } catch (err) {
-                console.error("Payload breakdown runtime handling.", err);
+                console.error("Payload tracking fault:", err);
             }
         });
 
