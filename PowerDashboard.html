@@ -43,27 +43,49 @@
             <div class="flex flex-col justify-between space-y-6 order-2 lg:order-1">
                 <div>
                     <h2 class="text-neutral-400 text-xs font-semibold uppercase tracking-widest mb-4">Power Information</h2>
-                    <div class="space-y-3">
-                        <div onclick="toggleDataset(0)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
+                    <div class="space-y-2 border border-neutral-900" >
+                        <div onclick="toggleDataset(0)" class="cursor-pointer group flex items-center justify-between p-2 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
                             <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Solar Production</span>
                             <span id="pv_w_lbl" class="font-semibold text-neutral-100">0 W</span>
                         </div>
-                        <div onclick="toggleDataset(1)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
+                        <div onclick="toggleDataset(1)" class="cursor-pointer group flex items-center justify-between p-2 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
                             <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-500"></span> Grid Draw</span>
                             <span id="grid_w_lbl" class="font-semibold text-neutral-100">0 W</span>
                         </div>
-                        <div class="flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900">
+                        <div class="flex items-center justify-between p-2 rounded-xl bg-neutral-900/40 border border-neutral-900">
                             <span class="text-sm text-neutral-400 flex items-center gap-2"><span id="bat_dot" class="w-2 h-2 rounded-full bg-neutral-500"></span> Battery Power</span>
                             <span id="bat_w_lbl" class="font-semibold text-neutral-100">0 W</span>
                         </div>
-                        <div onclick="toggleDataset(2)" class="cursor-pointer group flex items-center justify-between p-3 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
+                        <div onclick="toggleDataset(2)" class="cursor-pointer group flex items-center justify-between p-2 rounded-xl bg-neutral-900/40 border border-neutral-900 hover:border-neutral-800 transition">
                             <span class="text-sm text-neutral-400 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Home Draw (Active Power)</span>
                             <span id="ac_out_w_lbl" class="font-semibold text-neutral-100">0 W</span>
                         </div>
                     </div>
+                    <br>
                 </div>
 
                 <div class="border-t border-neutral-900 pt-4 grid grid-cols-2 gap-4 text-xs">
+
+                    <!-- MAX POWER -->
+                    <div >
+                        <span class="text-neutral-500 block mb-0.5"> MAX PV Power</span>
+                        <span id="max_pv_lbl" class="text-base font-medium text-neutral-200">0 W</span>
+                    </div>
+                    <div>
+                        <span class="text-neutral-500 block mb-0.5"> MAX Battery (Chg)</span>
+                        <span id="max_bat_lbl" class="text-base font-medium text-neutral-200">0 W</span>
+                    </div>
+                    <div>
+                        <span class="text-neutral-500 block mb-0.5"> MAX Grid Power</span>
+                        <span id="max_grid_lbl" class="text-base font-medium text-neutral-200">0 W</span>
+                    </div>
+                    <div>
+                        <span class="text-neutral-500 block mb-0.5"> MAX Home Load</span>
+                        <span id="max_home_lbl" class="text-base font-medium text-neutral-200">0 W</span>
+                    </div>
+                    
+                    <!-- END OF MAX POW -->
+                    
                     <div>
                         <span class="text-neutral-500 block mb-0.5">Solar Today</span>
                         <span id="pv_today_kwh" class="text-base font-medium text-neutral-200">0.00 kWh</span>
@@ -72,6 +94,7 @@
                         <span class="text-neutral-500 block mb-0.5">Lifetime Yield</span>
                         <span id="pv_lifetime_kwh" class="text-base font-medium text-neutral-200">0 kWh</span>
                     </div>
+
                 </div>
             </div>
 
@@ -119,7 +142,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-2 bg-[#141414] border border-neutral-900 rounded-3xl p-5 shadow-xl">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xs font-semibold uppercase tracking-widest text-neutral-400">Power History (30p)</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-widest text-neutral-400">Power History (100p)</h3>
                     <button onclick="clearHistory()" class="text-3xs font-semibold uppercase tracking-wider text-neutral-500 hover:text-red-400 transition cursor-pointer">Purge History</button>
                 </div>
                 <div class="h-64 relative">
@@ -156,11 +179,17 @@
         const MQTT_BROKER = "ws://192.168.1.127:9001"; 
         const MQTT_TOPIC = "solar/data";
 
+        let pv_max_pow=0;
+        let max_home_load=0;
+        let max_grid=0;
+        let max_bat_chg=0;
+
+
         let liveValues = { solar: 0, battery_w: 0, inverter: 0, grid: 0, ac_out_va: 0, ac_out_w: 0, bat_a: 0 };
         let flowSpeeds = { solar: 0, battery: 0, inverter: 0, grid: 0 };
 
-        // --- RETRIEVAL HISTORY STORES ---
-        const MAX_HISTORY_POINTS = 30;
+        // --- RETRIEVAL HISTORY STORES (Expanded to 100) ---
+        const MAX_HISTORY_POINTS = 100;
         let historicalData;
         try {
             historicalData = JSON.parse(localStorage.getItem('solar_history'));
@@ -169,29 +198,37 @@
             historicalData = { labels: [], pv: [], load: [], grid: [] };
         }
 
-        // --- TIMELINE CHART CONFIG ---
+        // --- TIMELINE CHART CONFIG (Hover tooltips enabled) ---
         const ctx = document.getElementById('historyChart').getContext('2d');
         const historyChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: historicalData.labels,
                 datasets: [
-                    { label: 'Solar', data: historicalData.pv, borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 0 },
-                    { label: 'Grid', data: historicalData.grid, borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 0 },
-                    { label: 'Home Load', data: historicalData.load, borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 0 }
+                    { label: 'Solar', data: historicalData.pv, borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 },
+                    { label: 'Grid', data: historicalData.grid, borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 },
+                    { label: 'Home Load', data: historicalData.load, borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: { enabled: true } // Explicitly enabled interactive value tooltips
+                },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: '#404040', font: { size: 10 } } },
+                    x: { grid: { display: false }, ticks: { color: '#404040', font: { size: 10 }, maxTicksLimit: 10 } }, // Expanded x-limit to scale 100 points safely
                     y: { grid: { color: '#171717' }, ticks: { color: '#404040', font: { size: 10 } } }
                 }
             }
         });
 
+        function max(a,b)
+        {
+            if(a>b) return a;
+            return b;
+        }
         function toggleDataset(index) {
             historyChart.setDatasetVisibility(index, !historyChart.isDatasetVisible(index));
             historyChart.update();
@@ -209,7 +246,7 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Particle generator clock loop
+        // High frequency particle production clock loop
         setInterval(() => {
             if (flowSpeeds.solar > 0.05) particles.push({ path: 'solar_to_inv', progress: 0 });
             if (flowSpeeds.grid > 0.05) particles.push({ path: 'grid_to_inv', progress: 0 });
@@ -340,6 +377,15 @@
             liveValues.battery_w = Number(data.bat_v * data.bat_a).toFixed(2);
             liveValues.bat_a = data.bat_a;
 
+            pv_max_pow= max(pv_max_pow,data.pv_w);
+            max_home_load= max(max_home_load,data.ac_out_w);
+            max_grid=max(max_grid,data.grid_w);
+
+            if(liveValues.battery_w>0)
+            {
+                max_bat_chg = max(max_bat_chg,lineValues.battery);
+            }
+
             // Velocity logic weights
             flowSpeeds.solar = Math.min(data.pv_w / 200, 4);
             flowSpeeds.grid = Math.min(data.grid_w / 200, 4);
@@ -349,6 +395,11 @@
             document.getElementById('pv_w_lbl').innerText = `${liveValues.solar} W`;
             document.getElementById('grid_w_lbl').innerText = `${liveValues.grid} W`;
             document.getElementById('ac_out_w_lbl').innerText = `${liveValues.ac_out_w} W`;
+            document.getElementById('max_pv_lbl').innerText = `${pv_max_pow} W`;
+            document.getElementById('max_grid_lbl').innerText = `${max_grid} W`;
+            document.getElementById('max_home_lbl').innerText = `${max_home_load} W`;
+            document.getElementById('max_bat_lbl').innerText = `${max_bat_chg} W`;
+            
             
             const batPowerLbl = document.getElementById('bat_w_lbl');
             const batDot = document.getElementById('bat_dot');
@@ -427,7 +478,7 @@
             historyChart.update();
         }
 
-        const mockPayload = { "ac_in_v": 229.6, "ac_in_hz": 50.04, "ac_out_v": 229.6, "ac_out_hz": 50.04, "ac_out_va": 277, "ac_out_w": 277, "load_pct": 13.8, "inv_out_w": 177, "bat_v": 13.2, "bat_a": 0, "grid_w": 177, "charge_v_const": 14.4, "charge_v_float": 14.2, "pv_charge_limit_a": 50, "pv_v": 84.4, "pv_a": 1.71, "pv_w": 133, "pv_today_kwh": 2.62, "pv_lifetime_kwh": 3059 };
+        const mockPayload = { "ac_in_v": 229.6, "ac_in_hz": 50.04, "ac_out_v": 229.6, "ac_out_hz": 50.04, "ac_out_va": 0, "ac_out_w": 0, "load_pct": 13.8, "inv_out_w": 0, "bat_v": 13.2, "bat_a": 0, "grid_w": 0, "charge_v_const": 14.4, "charge_v_float": 14.2, "pv_charge_limit_a": 50, "pv_v": 84.4, "pv_a": 1.71, "pv_w": 0, "pv_today_kwh": 2.62, "pv_lifetime_kwh": 30.59 };
         updateUI(mockPayload);
     </script>
 </body>
