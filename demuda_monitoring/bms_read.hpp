@@ -41,7 +41,7 @@ BMSData getBMSData();
 #ifdef __cplusplus
 extern "C" {
 #endif
-void BluetoothTask(void* pvParameters); // <--- Semicolon explicitly placed here
+void BluetoothTask(void* pvParameters); 
 #ifdef __cplusplus
 }
 #endif

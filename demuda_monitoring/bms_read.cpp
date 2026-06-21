@@ -20,6 +20,12 @@ static volatile bool notify_ready = false;
 // D2 03 00 00 00 50 56 55  =  addr=0x0000, count=80 registers (160 bytes)
 static const uint8_t REQ_D2_STATUS[8] = {0xD2, 0x03, 0x00, 0x00, 0x00, 0x50, 0x56, 0x55};
 
+// ── BLE notification buffer ───────────────────────────────────────────────────
+static uint8_t rx_buf[256];
+static uint16_t rx_len = 0;
+
+
+// ── BMS data ─────────────────────────────────────────────────────────────────
 static BMSData bms;
 
 // ── Modbus helpers ────────────────────────────────────────────────────────────
@@ -94,10 +100,12 @@ static void decode_d2_status(const uint8_t *payload, size_t len)
 
     // Rated capacity derived from remaining_Ah / (SOC% / 100)
     // (no separate "rated capacity" field found in this frame layout)
-    if (bms.soc_pct > 0.1f)
+    if (bms.soc_pct > 0.1f){
         bms.rated_cap_ah = bms.remaining_cap_ah / (bms.soc_pct / 100.0f);
-    else
+    }
+    else{
         bms.rated_cap_ah = 0.0f;
+    }
 
     bms.valid = true;
 
@@ -110,9 +118,6 @@ static void decode_d2_status(const uint8_t *payload, size_t len)
                   bms.mos_byte, bms.charge_mos, bms.discharge_mos);
 }
 
-// ── BLE notification buffer ───────────────────────────────────────────────────
-static uint8_t rx_buf[256];
-static uint16_t rx_len = 0;
 
 static void process_rx_buffer()
 {
@@ -138,14 +143,10 @@ static void process_rx_buffer()
         decode_d2_status(rx_buf + 3, n);
 
         rx_len -= need;
-        if (rx_len > 0)
+        if (rx_len > 0){
             memmove(rx_buf, rx_buf + need, rx_len);
+        }
     }
-}
-
-BMSData getBMSData()
-{
-    return bms;
 }
 
 static void onNotify(BLERemoteCharacteristic *, uint8_t *data, size_t length, bool)
@@ -318,4 +319,11 @@ extern "C" void BluetoothTask(void *pvParameters)
 
         delay(POLL_INTERVAL_MS);
     }
+}
+
+
+//public function to get the latest BMS data
+BMSData getBMSData()
+{
+    return bms;
 }

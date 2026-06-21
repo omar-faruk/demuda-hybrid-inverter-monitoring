@@ -5,9 +5,12 @@
 #include "WiFi_MQTT.h"
 #include "bms_read.hpp"
 
+
+#define MQTT_MAX_BUFFER_SIZE 1024
+
 WiFiClient espClient;
 PubSubClient client(espClient);
-char mqtt_buffer[1024];
+char mqtt_buffer[MQTT_MAX_BUFFER_SIZE];
 static uint8_t data_interval;
 static unsigned long lastPublish = 0;
 TaskHandle_t BTTaskHandle = NULL;
@@ -16,6 +19,8 @@ ModbusMaster node;
 
 uint16_t pv_max_power=0, max_load=0;
 float max_bat_charge=0, max_bat_discharge=0;
+
+static BMSData bms; // global BMS data structure
 
 
 template<typename T>
@@ -73,33 +78,23 @@ void setup() {
   Serial.begin(115200);
 
 
-  // Modbus init (Serial2 example)
+  // Modbus init (on serial2)
   Serial2.begin(9600, SERIAL_8N1, 16, 17);  // RX=16 TX=17
   node.begin(1, Serial2);                   // slave ID = 1
-  // node.preTransmission(preTransmission);
-  // node.postTransmission(postTransmission);
 
-  // WiFi
+  // WiFi Setup
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) delay(500);
 
   Serial.println("WiFi Connected");
-  // MQTT
-  client.setBufferSize(1024);
+  // MQTT Setup
+  client.setBufferSize(MQTT_MAX_BUFFER_SIZE);
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(mqtt_callback);
   data_interval = 30;
   reconnect();
 
-  xTaskCreatePinnedToCore(
-    BluetoothTask,    /* Task function. */
-    "BluetoothTask",  /* Name of task. */
-    10000,            /* Stack size in words. */
-    NULL,             /* Parameter of the task. */
-    2,                /* Priority of the task (High priority for BT) */
-    &BTTaskHandle,    /* Task handle. */
-    0                 /* Pin to Core 0 */
-  );
+  xTaskCreatePinnedToCore(BluetoothTask, "BluetoothTask", 10000, NULL, 2, &BTTaskHandle, 0);
 }
 
 // ---------------- MQTT reconnect ----------------
@@ -208,7 +203,7 @@ void loop() {
     doc["cell_4"]=bms.cell_v[3];
 
     // Serialize JSON
-    memset(mqtt_buffer, 0, 1024);
+    memset(mqtt_buffer, 0, MQTT_MAX_BUFFER_SIZE);
     size_t n = serializeJson(doc, mqtt_buffer);
 
 
