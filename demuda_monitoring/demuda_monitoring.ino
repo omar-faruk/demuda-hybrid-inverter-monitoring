@@ -3,24 +3,31 @@
 #include <ModbusMaster.h>
 #include <ArduinoJson.h>
 #include "WiFi_MQTT.h"
+#include "bms_read.hpp"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 char mqtt_buffer[1024];
 static uint8_t data_interval;
 static unsigned long lastPublish = 0;
+TaskHandle_t BTTaskHandle = NULL;
 // ---------------- Modbus ----------------
 ModbusMaster node;
 
-// RS485 direction control pin
-#define RE_DE 4
+uint16_t pv_max_power=0, max_load=0;
+float max_bat_charge=0, max_bat_discharge=0;
 
-void preTransmission() {
-  // digitalWrite(RE_DE, HIGH);
+
+template<typename T>
+T MAX(T a, T b)
+{
+    return (a > b) ? a : b;
 }
 
-void postTransmission() {
-  // digitalWrite(RE_DE, LOW);
+template<typename T>
+T MIN(T a, T b)
+{
+    return (a < b) ? a : b;
 }
 
 void mqtt_callback(char *topic, byte *payload, unsigned int length) {
@@ -65,14 +72,12 @@ long readRegRaw(uint16_t reg) {
 void setup() {
   Serial.begin(115200);
 
-  pinMode(RE_DE, OUTPUT);
-  digitalWrite(RE_DE, LOW);
 
   // Modbus init (Serial2 example)
   Serial2.begin(9600, SERIAL_8N1, 16, 17);  // RX=16 TX=17
   node.begin(1, Serial2);                   // slave ID = 1
-  node.preTransmission(preTransmission);
-  node.postTransmission(postTransmission);
+  // node.preTransmission(preTransmission);
+  // node.postTransmission(postTransmission);
 
   // WiFi
   WiFi.begin(ssid, password);
@@ -85,6 +90,16 @@ void setup() {
   client.setCallback(mqtt_callback);
   data_interval = 30;
   reconnect();
+
+  xTaskCreatePinnedToCore(
+    BluetoothTask,    /* Task function. */
+    "BluetoothTask",  /* Name of task. */
+    10000,            /* Stack size in words. */
+    NULL,             /* Parameter of the task. */
+    2,                /* Priority of the task (High priority for BT) */
+    &BTTaskHandle,    /* Task handle. */
+    0                 /* Pin to Core 0 */
+  );
 }
 
 // ---------------- MQTT reconnect ----------------
@@ -132,14 +147,23 @@ void loop() {
     doc["ac_out_va"] = readRegRaw(91);
     doc["ac_out_w"] = readRegRaw(92);
     doc["load_pct"] = readReg(93, 10);
-    doc["inv_out_w"] = readRegRaw(94);
+    
+    max_load = MAX(max_load, (uint16_t)doc["ac_out_w"]);
+    doc["max_load"] = max_load;
 
     // ========== BATTERY ==========
     doc["bat_v"] = readReg(128, 10);
     doc["bat_a"] = invert(readReg(129, 10, true));
+    float batt_w = ((float)doc["bat_a"])*((float)doc["bat_v"]);
+    max_bat_charge = MAX(max_bat_charge, batt_w);
+    max_bat_discharge = MIN(batt_w,max_bat_discharge);
+    doc["max_bat_chg_w"] = max_bat_charge;
+    doc["max_bat_dischg_w"] = max_bat_discharge;
+
+
 
     // ========== GRID ==========
-    doc["grid_w"] = readRegRaw(149);
+    doc["grid_w"] = readRegRaw(149);    
 
     // ========== CHARGING ==========
     doc["charge_v_const"] = readReg(375, 10);
@@ -150,10 +174,38 @@ void loop() {
     doc["pv_v"] = readReg(624, 10);
     doc["pv_a"] = readReg(625, 100, true);
     doc["pv_w"] = readReg(626, 1, true);
+
+    pv_max_power = MAX(pv_max_power, (uint16_t)doc["pv_w"]);
+
     doc["pv_today_kwh"] = readReg(630, 100);
+    doc["max_pv"] = pv_max_power;
 
     // ========== ENERGY COUNTERS ==========
-    doc["pv_lifetime_kwh"] = readRegRaw(618);  // simplified raw view
+     uint32_t pv_month = ((uint32_t)readRegRaw(619) << 16) | (uint16_t)readRegRaw(618);
+
+    uint32_t pv_year = ((uint32_t)readRegRaw(621) << 16) | (uint16_t)readRegRaw(620);
+
+    uint32_t pv_total = ((uint32_t)readRegRaw(623) << 16) | (uint16_t)readRegRaw(622);
+
+    doc["pv_month_kwh"] = pv_month / 100.0;
+    doc["pv_year_kwh"]  = pv_year / 100.0;
+    doc["pv_total_kwh"] = pv_total / 100.0;
+
+    BMSData bms = getBMSData();
+    if(!bms.valid)
+    {
+      memset(&bms, 0, sizeof(bms));
+    }
+
+    doc["bms_total_v"] = bms.total_voltage_v;
+    doc["bms_current_a"] = bms.current_a;
+    doc["bms_soc_pct"] = bms.soc_pct;
+    doc["bms_remaining_ah"] = bms.remaining_cap_ah*2;
+    doc["bms_cycle_count"] = bms.cycles;
+    doc["cell_1"]=bms.cell_v[0];
+    doc["cell_2"]=bms.cell_v[1];
+    doc["cell_3"]=bms.cell_v[2];
+    doc["cell_4"]=bms.cell_v[3];
 
     // Serialize JSON
     memset(mqtt_buffer, 0, 1024);
