@@ -65,8 +65,6 @@
                 </div>
 
                 <div class="border-t border-neutral-900 pt-4 grid grid-cols-2 gap-4 text-xs">
-
-                    <!-- MAX POWER -->
                     <div >
                         <span class="text-neutral-500 block mb-0.5"> MAX PV Power</span>
                         <span id="max_pv_lbl" class="text-base font-medium text-neutral-200">0 W</span>
@@ -76,16 +74,13 @@
                         <span id="max_bat_lbl" class="text-base font-medium text-neutral-200">0 W</span>
                     </div>
                     <div>
-                        <span class="text-neutral-500 block mb-0.5"> MAX Grid Power</span>
-                        <span id="max_grid_lbl" class="text-base font-medium text-neutral-200">0 W</span>
+                        <span class="text-neutral-500 block mb-0.5"> Solar Average</span>
+                        <span id="pv_avg_lbl" class="text-base font-medium text-neutral-200">0 W</span>
                     </div>
                     <div>
                         <span class="text-neutral-500 block mb-0.5"> MAX Home Load</span>
                         <span id="max_home_lbl" class="text-base font-medium text-neutral-200">0 W</span>
                     </div>
-                    
-                    <!-- END OF MAX POW -->
-                    
                     <div>
                         <span class="text-neutral-500 block mb-0.5">Solar Today</span>
                         <span id="pv_today_kwh" class="text-base font-medium text-neutral-200">0.00 kWh</span>
@@ -94,7 +89,6 @@
                         <span class="text-neutral-500 block mb-0.5">Lifetime Yield</span>
                         <span id="pv_lifetime_kwh" class="text-base font-medium text-neutral-200">0 kWh</span>
                     </div>
-
                 </div>
             </div>
 
@@ -107,7 +101,6 @@
                     </div>
                     <span id="pv_pct_badge" class="text-[11px] font-semibold text-neutral-200">0%</span>
                     <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mt-1">Solar</span>
-                    
                 </div>
 
                 <div class="absolute top-4 flex flex-col items-center">
@@ -117,11 +110,29 @@
                     <span class="text-[10px] uppercase font-bold tracking-wider text-neutral-500 mt-1">Grid</span>
                 </div>
 
-                <div class="absolute top-4 right-6 md:right-12 flex flex-col items-center">
+                <div class="absolute top-4 right-6 md:right-12 flex flex-col items-center group">
                     <div class="w-14 h-14 rounded-full bg-neutral-950 border-2 flex items-center justify-center ring-battery transition-transform duration-300 hover:scale-105 overflow-hidden p-2">
                         <img src="https://freesvg.org/img/rodentia-icons_battery-medium-charging.png" alt="Battery" class="w-full h-full object-contain" />
                     </div>
                     <span id="bat_v_badge" class="text-[11px] font-semibold text-neutral-300 mt-1">0V</span>
+                    
+                    <div class="absolute top-20 right-0 w-52 bg-neutral-950/95 border border-neutral-800 rounded-xl p-3 shadow-2xl backdrop-blur-sm hidden group-hover:block z-50 pointer-events-none text-xs space-y-2 transition-all">
+                        <div class="font-bold border-b border-neutral-800 pb-1 text-emerald-400 flex justify-between">
+                            <span>BMS Status</span>
+                            <span id="tt_soc">0%</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-2 gap-y-1 font-mono text-neutral-400">
+                            <div>Cell 1: <span id="tt_c1" class="text-neutral-200">0.000V</span></div>
+                            <div>Cell 2: <span id="tt_c2" class="text-neutral-200">0.000V</span></div>
+                            <div>Cell 3: <span id="tt_c3" class="text-neutral-200">0.000V</span></div>
+                            <div>Cell 4: <span id="tt_c4" class="text-neutral-200">0.000V</span></div>
+                        </div>
+                        <div class="border-t border-neutral-800/60 pt-1 text-[10px] text-neutral-500 space-y-0.5">
+                            <div>Total BMS V: <span id="tt_v" class="text-neutral-300 font-mono">0.0V</span></div>
+                            <div>Cycles: <span id="tt_cyc" class="text-neutral-300 font-mono">0</span></div>
+                            <div>Remaining: <span id="tt_rem" class="text-neutral-300 font-mono">0 Ah</span></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="absolute top-[180px] flex flex-col items-center">
@@ -186,21 +197,20 @@
         let max_grid=0;
         let max_bat_chg=0;
 
-
         let liveValues = { solar: 0, battery_w: 0, inverter: 0, grid: 0, ac_out_va: 0, ac_out_w: 0, bat_a: 0 };
         let flowSpeeds = { solar: 0, battery: 0, inverter: 0, grid: 0 };
 
-        // --- RETRIEVAL HISTORY STORES (Expanded to 100) ---
+        // --- RETRIEVAL HISTORY STORES ---
         const MAX_HISTORY_POINTS = 100;
         let historicalData;
         try {
             historicalData = JSON.parse(localStorage.getItem('solar_history'));
-            if (!historicalData || !historicalData.labels || !historicalData.pv || !historicalData.load || !historicalData.grid) throw new Error();
+            if (!historicalData || !historicalData.labels || !historicalData.pv || !historicalData.load || !historicalData.grid || !historicalData.pv_avg) throw new Error();
         } catch(e) {
-            historicalData = { labels: [], pv: [], load: [], grid: [] };
+            historicalData = { labels: [], pv: [], load: [], grid: [], pv_avg: [] };
         }
 
-        // --- TIMELINE CHART CONFIG (Hover tooltips enabled) ---
+        // --- TIMELINE CHART CONFIG ---
         const ctx = document.getElementById('historyChart').getContext('2d');
         const historyChart = new Chart(ctx, {
             type: 'line',
@@ -209,7 +219,8 @@
                 datasets: [
                     { label: 'Solar', data: historicalData.pv, borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 },
                     { label: 'Grid', data: historicalData.grid, borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 },
-                    { label: 'Home Load', data: historicalData.load, borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 }
+                    { label: 'Home Load', data: historicalData.load, borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.25, borderWidth: 2, pointRadius: 2, pointHoverRadius: 5 },
+                    { label: 'Solar Average', data: historicalData.pv_avg, borderColor: '#ca8a04', backgroundColor: 'transparent', tension: 0.1, borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0 }
                 ]
             },
             options: {
@@ -217,20 +228,20 @@
                 maintainAspectRatio: false,
                 plugins: { 
                     legend: { display: false },
-                    tooltip: { enabled: true } // Explicitly enabled interactive value tooltips
+                    tooltip: { enabled: true }
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: '#404040', font: { size: 10 }, maxTicksLimit: 10 } }, // Expanded x-limit to scale 100 points safely
+                    x: { grid: { display: false }, ticks: { color: '#404040', font: { size: 10 }, maxTicksLimit: 10 } },
                     y: { grid: { color: '#171717' }, ticks: { color: '#404040', font: { size: 10 } } }
                 }
             }
         });
 
-        function max(a,b)
-        {
+        function max(a,b) {
             if(a>b) return a;
             return b;
         }
+        
         function toggleDataset(index) {
             historyChart.setDatasetVisibility(index, !historyChart.isDatasetVisible(index));
             historyChart.update();
@@ -248,25 +259,20 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // High frequency particle production clock loop
         setInterval(() => {
             if (flowSpeeds.solar > 0.05) particles.push({ path: 'solar_to_inv', progress: 0 });
             if (flowSpeeds.grid > 0.05) particles.push({ path: 'grid_to_inv', progress: 0 });
             if (flowSpeeds.inverter > 0.05) particles.push({ path: 'inv_to_home', progress: 0 });
             
-            // Dynamic generation rules for battery flow direction states
             if (flowSpeeds.battery > 0.05) {
                 if (liveValues.bat_a > 0.1) {
-                    // Charging state: Particles run from Inverter up into Battery
                     particles.push({ path: 'inv_to_bat', progress: 0 });
                 } else if (liveValues.bat_a < -0.1) {
-                    // Discharging state: Particles run from Battery down into Inverter
                     particles.push({ path: 'bat_to_inv', progress: 0 });
                 }
             }
         }, 140);
 
-        // Utility helper to render an oriented glow arrow pointing along a specific pathway angle
         function drawArrowHead(ctx, x, y, angle, color) {
             ctx.save();
             ctx.translate(x, y);
@@ -291,7 +297,6 @@
             const h = canvas.height;
             const centerX = w * 0.5;
 
-            // Structural layout node definitions
             const nodes = {
                 solar: { x: w * (w < 768 ? 0.15 : 0.14), y: 70 },
                 grid: { x: centerX, y: 44 },
@@ -314,7 +319,6 @@
                 fctx.beginPath(); fctx.moveTo(l.from.x, l.from.y); fctx.lineTo(l.to.x, l.to.y); fctx.stroke();
             });
 
-            // Advance particle arrows matrix forward across frames
             particles.forEach((p, index) => {
                 let speed = 0.007;
                 let color = '#d4d4d4';
@@ -324,7 +328,6 @@
                 if (p.path === 'grid_to_inv') { start = nodes.grid; end = nodes.inverter; speed += flowSpeeds.grid * 0.012; color = '#ef4444'; }
                 if (p.path === 'inv_to_home') { start = nodes.inverter; end = nodes.home; speed += flowSpeeds.inverter * 0.009; color = '#a855f7'; }
                 
-                // Mapped paths evaluating battery condition states
                 if (p.path === 'bat_to_inv') { start = nodes.battery; end = nodes.inverter; speed += flowSpeeds.battery * 0.012; color = '#10b981'; }
                 if (p.path === 'inv_to_bat') { start = nodes.inverter; end = nodes.battery; speed += flowSpeeds.battery * 0.012; color = '#10b981'; }
 
@@ -336,12 +339,10 @@
                 let currentX = start.x + (end.x - start.x) * p.progress;
                 let currentY = start.y + (end.y - start.y) * p.progress;
 
-                // Find angle tracking pathway coordinates vector heading
                 let angle = Math.atan2(end.y - start.y, end.x - start.x);
                 drawArrowHead(fctx, currentX, currentY, angle, color);
             });
 
-            // RENDER CONVERGED LIVE WATTAGE LABELS DIRECTLY ON CHANNELS
             fctx.font = '10px monospace';
             fctx.textAlign = 'center';
             fctx.textBaseline = 'middle';
@@ -349,7 +350,7 @@
             const lineLabels = [
                 { start: nodes.solar, end: nodes.inverter, value: liveValues.solar + 'W', color: '#f59e0b', offX: -18, offY: -12 },
                 { start: nodes.grid, end: nodes.inverter, value: liveValues.grid + 'W', color: '#ef4444', offX: 24, offY: 0 },
-                { start: nodes.battery, end: nodes.inverter, value: Math.abs(liveValues.battery_w) + 'W', color: '#10b981', offX: 18, offY: -12 },
+                { start: nodes.battery, end: nodes.inverter, value: Math.abs(liveValues.battery_w).toFixed(0) + 'W', color: '#10b981', offX: 18, offY: -12 },
                 { start: nodes.inverter, end: nodes.home, value: liveValues.ac_out_va + 'VA (' + liveValues.ac_out_w + 'W)', color: '#a855f7', offX: 44, offY: 0 }
             ];
 
@@ -379,16 +380,14 @@
             liveValues.battery_w = Number(data.bat_v * data.bat_a).toFixed(2);
             liveValues.bat_a = data.bat_a;
 
-            pv_max_pow= max(pv_max_pow,data.pv_w);
-            max_home_load= max(max_home_load,data.ac_out_w);
-            max_grid=max(max_grid,data.grid_w);
+            pv_max_pow = max(pv_max_pow, data.pv_w);
+            max_home_load = max(max_home_load, data.ac_out_w);
+            max_grid = max(max_grid, data.grid_w);
 
-            if(liveValues.battery_w>0)
-            {
-                max_bat_chg = Number(max(max_bat_chg,Number(data.bat_v * data.bat_a))).toFixed(2);
+            if(liveValues.battery_w > 0) {
+                max_bat_chg = Number(max(max_bat_chg, Number(data.bat_v * data.bat_a))).toFixed(2);
             }
 
-            // Velocity logic weights
             flowSpeeds.solar = Math.min(data.pv_w / 200, 4);
             flowSpeeds.grid = Math.min(data.grid_w / 200, 4);
             flowSpeeds.inverter = Math.min(data.ac_out_va / 200, 4);
@@ -398,10 +397,8 @@
             document.getElementById('grid_w_lbl').innerText = `${liveValues.grid} W`;
             document.getElementById('ac_out_w_lbl').innerText = `${liveValues.ac_out_w} W`;
             document.getElementById('max_pv_lbl').innerText = `${pv_max_pow} W`;
-            document.getElementById('max_grid_lbl').innerText = `${max_grid} W`;
             document.getElementById('max_home_lbl').innerText = `${max_home_load} W`;
             document.getElementById('max_bat_lbl').innerText = `${max_bat_chg} W`;
-            
             
             const batPowerLbl = document.getElementById('bat_w_lbl');
             const batDot = document.getElementById('bat_dot');
@@ -419,29 +416,49 @@
                 batDot.className = "w-2 h-2 rounded-full bg-neutral-500";
             }
 
+            // Central Node Circle Badges
+            const soc = data.bms_soc_pct !== undefined ? data.bms_soc_pct : (data.bms_soc_pct || 0);
             document.getElementById('load_pct_badge').innerText = `${Number(data.load_pct).toFixed(1)}%`;
             document.getElementById('pv_pct_badge').innerText = `${Number(data.pv_w/11.90).toFixed(1)}%`;
-            document.getElementById('bat_v_badge').innerText = `${Number(data.bat_v).toFixed(1)} V`;
+            document.getElementById('bat_v_badge').innerText = `${Number(data.bat_v).toFixed(1)} V (${Number(soc).toFixed(1)}%)`;
+
+            // INJECT METRICS INTO DYNAMIC BMS HOVER HOOK TOOLTIP
+            document.getElementById('tt_soc').innerText = `${Number(soc).toFixed(1)}%`;
+            document.getElementById('tt_c1').innerText = `${Number(data.cell_1 || 0).toFixed(3)}V`;
+            document.getElementById('tt_c2').innerText = `${Number(data.cell_2 || 0).toFixed(3)}V`;
+            document.getElementById('tt_c3').innerText = `${Number(data.cell_3 || 0).toFixed(3)}V`;
+            document.getElementById('tt_c4').innerText = `${Number(data.cell_4 || 0).toFixed(3)}V`;
+            document.getElementById('tt_v').innerText = `${Number(data.bms_total_v || data.bat_v).toFixed(1)}V`;
+            document.getElementById('tt_cyc').innerText = `${data.bms_cycle_count || 0}`;
+            document.getElementById('tt_rem').innerText = `${Number(data.bms_remaining_ah || 0).toFixed(1)} Ah`;
 
             document.getElementById('pv_today_kwh').innerText = `${Number(data.pv_today_kwh).toFixed(2)} kWh`;
-            document.getElementById('pv_lifetime_kwh').innerText = `${data.pv_lifetime_kwh/100} kWh`;
+            document.getElementById('pv_lifetime_kwh').innerText = `${data.pv_total_kwh} kWh`;
 
             document.getElementById('ac_in').innerText = `${Number(data.ac_in_v).toFixed(1)}V @ ${Number(data.ac_in_hz).toFixed(1)}Hz`;
-            document.getElementById('inv_out_w').innerText = `${Number(data.inv_out_w).toFixed(0)} W`;
+            document.getElementById('inv_out_w').innerText = `${Number(data.ac_out_w).toFixed(0)} W`;
             document.getElementById('bat_a').innerText = `${Number(data.bat_a).toFixed(1)} A`;
             document.getElementById('charge_limits').innerText = `${Number(data.charge_v_const).toFixed(1)}V / ${Number(data.charge_v_float).toFixed(1)}V`;
 
             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
             historicalData.labels.push(timestamp);
             historicalData.pv.push(data.pv_w);
             historicalData.load.push(data.ac_out_w);
             historicalData.grid.push(data.grid_w);
+
+            const pvSum = historicalData.pv.reduce((total, val) => total + val, 0);
+            const pvAverage = Math.round(pvSum / historicalData.pv.length);
+            historicalData.pv_avg.push(pvAverage);
+
+            document.getElementById('pv_avg_lbl').innerText = `${pvAverage} W`;
 
             if (historicalData.labels.length > MAX_HISTORY_POINTS) {
                 historicalData.labels.shift();
                 historicalData.pv.shift();
                 historicalData.load.shift();
                 historicalData.grid.shift();
+                historicalData.pv_avg.shift();
             }
 
             localStorage.setItem('solar_history', JSON.stringify(historicalData));
@@ -472,16 +489,18 @@
         });
 
         function clearHistory() {
-            historicalData = { labels: [], pv: [], load: [], grid: [] };
+            historicalData = { labels: [], pv: [], load: [], grid: [], pv_avg: [] };
             localStorage.removeItem('solar_history');
             historyChart.data.labels = historicalData.labels;
             historyChart.data.datasets[0].data = historicalData.pv;
             historyChart.data.datasets[1].data = historicalData.grid;
             historyChart.data.datasets[2].data = historicalData.load;
+            historyChart.data.datasets[3].data = historicalData.pv_avg;
             historyChart.update();
+            document.getElementById('pv_avg_lbl').innerText = "0 W";
         }
 
-        const mockPayload = { "ac_in_v": 229.6, "ac_in_hz": 50.04, "ac_out_v": 229.6, "ac_out_hz": 50.04, "ac_out_va": 0, "ac_out_w": 0, "load_pct": 13.8, "inv_out_w": 0, "bat_v": 13.2, "bat_a": 0, "grid_w": 0, "charge_v_const": 14.4, "charge_v_float": 14.2, "pv_charge_limit_a": 50, "pv_v": 84.4, "pv_a": 1.71, "pv_w": 0, "pv_today_kwh": 2.62, "pv_lifetime_kwh": 3059 };
+        const mockPayload = { "ac_in_v": 229.6, "ac_in_hz": 50.04, "ac_out_v": 229.6, "ac_out_hz": 50.04, "ac_out_va": 0, "ac_out_w": 0, "load_pct": 13.8, "inv_out_w": 0, "bat_v": 13.2, "bms_total_v": 13.3, "bms_soc_pct": 67.7, "bms_remaining_ah": 135.4, "bms_cycle_count": 5, "cell_1": 3.335, "cell_2": 3.335, "cell_3": 3.335, "cell_4": 3.335, "bat_a": 0, "grid_w": 0, "charge_v_const": 14.4, "charge_v_float": 14.2, "pv_charge_limit_a": 50, "pv_v": 84.4, "pv_a": 1.71, "pv_w": 0, "pv_today_kwh": 2.62, "pv_total_kwh": 30.59 };
         updateUI(mockPayload);
     </script>
 </body>
